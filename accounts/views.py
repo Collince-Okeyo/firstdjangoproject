@@ -3,6 +3,7 @@ from django.http import HttpResponse
 from django.forms import inlineformset_factory
 from .models import *
 from .forms import OrderForm 
+from .filters import OrderFilter 
 
 
 # Create your views here.
@@ -34,21 +35,29 @@ def customer(request, pk_test):
 
 	orders = customer.order_set.all()
 	orders_total = orders.count()
-	context = {"customer": customer, 'orders': orders, 'orders_total': orders_total}
+
+	myFilter = OrderFilter(request.GET, queryset=orders)
+	orders = myFilter.qs
+
+	context = {"customer": customer, 'orders': orders, 'orders_total': orders_total, 'myFilter': myFilter}
 	return render(request, 'accounts/customer.html', context)
 
 def createOrder(request, pk):
-	customer = Customer.objects.get(id=pk)
 
-	form = OrderForm(initial={'customer': customer})
+# Creating inline forms
+	OrderFormSet = inlineformset_factory(Customer, Order, fields=('product', 'status'), extra=10)
+	customer = Customer.objects.get(id=pk)
+	formSet = OrderFormSet(queryset=Order.objects.none(), instance=customer)
+	# form = OrderForm(initial={'customer': customer})
 	if request.method == 'POST':
 		# print('Printing POST: ', request.POST)
-		form = OrderForm(request.POST)
-		if form.is_valid():
-			form.save()
+		# form = OrderForm(request.POST)
+		formSet = OrderFormSet(request.POST, instance=customer)
+		if formSet.is_valid():
+			formSet.save()
 			return redirect('/')
 	
-	context = {'form': form}
+	context = {'formSet': formSet}
 	return render(request, 'accounts/order_form.html', context)
 
 def updateOrders(request, pk):
