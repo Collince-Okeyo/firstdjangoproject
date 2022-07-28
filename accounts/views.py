@@ -1,3 +1,4 @@
+from re import L
 from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.forms import inlineformset_factory
@@ -8,6 +9,7 @@ from .forms import CreateUserForm, OrderForm
 from .filters import OrderFilter 
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
 
 # Adding message
 from django.contrib import messages
@@ -17,41 +19,46 @@ from django.contrib import messages
 # Create your views here.
 
 def registerPage(request):
-	form = CreateUserForm()
+	if request.user.is_authenticated:
+		return redirect('home')
+	else:
+		form = CreateUserForm()
+		if request.method == "POST":
+			form = CreateUserForm(request.POST)
+			if form.is_valid():
+				form.save()
+				user = form.cleaned_data.get('username')
+				messages.success(request, 'Account was created successfuly for '+ user)
+				return redirect('login')
 
-	if request.method == "POST":
-		form = CreateUserForm(request.POST)
-		if form.is_valid():
-			form.save()
-			user = form.cleaned_data.get('username')
-			messages.success(request, 'Account was created successfuly for '+ user)
-			return redirect('login')
-	context = {'form': form}
-	return render(request, 'accounts/register.html', context)
+		context = {'form': form}
+		return render(request, 'accounts/register.html', context)
 
 def loginPage(request):
+	if request.user.is_authenticated:
+		return redirect('home')
+	else:
+		if request.method == 'POST':
+			username = request.POST.get('username')
+			password = request.POST.get('password')
 
-	if request.method == 'POST':
-		username = request.POST.get('username')
-		password = request.POST.get('password')
+			user = authenticate(request, username=username, password=password)
 
-		user = authenticate(request, username=username, password=password)
+			if user is not None:
+				login(request, user)
+				return redirect('home')
+			else:
+				messages.info(request, 'Username or password is incorrect')
+				
 
-		if user is not None:
-			login(request, user)
-			return redirect('home')
-		else:
-			messages.info(request, 'Username or password is incorrect')
-			
-
-	context = {}
-	return render(request, 'accounts/login.html', context)
+		context = {}
+		return render(request, 'accounts/login.html', context)
 
 def logoutUser(request):
 	logout(request)
 	return redirect('login')
 
-# Rendering templates
+@login_required(login_url='login')
 def home(request):
 	# Showing the data in the home
 	orders = Order.objects.all()
@@ -65,11 +72,13 @@ def home(request):
 	context = {'orders':orders, 'customers':customers, 'total_orders':total_orders, 'delivered':delivered, 'pending':pending}
 	return render(request, 'accounts/dashboard.html', context)
 
+@login_required(login_url='login')
 def products(request):
 	products = Product.objects.all()
 	# Rendering products to the view using teplates
 	return render(request, 'accounts/products.html', {'products':products})
 
+@login_required(login_url='login')
 def customer(request, pk_test):
 	customer = Customer.objects.get(id=pk_test)
 	orders = customer.order_set.all()
@@ -79,6 +88,7 @@ def customer(request, pk_test):
 	context = {"customer": customer, 'orders': orders, 'orders_total': orders_total, 'myFilter': myFilter}
 	return render(request, 'accounts/customer.html', context)
 
+@login_required(login_url='login')
 def createOrder(request, pk):
 
 # Creating inline forms
@@ -96,6 +106,7 @@ def createOrder(request, pk):
 	context = {'formSet': formSet}
 	return render(request, 'accounts/order_form.html', context)
 
+@login_required(login_url='login')
 def updateOrders(request, pk):
 	order = Order.objects.get(id=pk)
 	form = OrderForm(instance=order)
@@ -110,6 +121,7 @@ def updateOrders(request, pk):
 	context = {'form':form}
 	return render(request, 'accounts/order_form.html', context)
 
+@login_required(login_url='login')
 def deleteOrders (request, pk):
 	order = Order.objects.get(id=pk)
 
