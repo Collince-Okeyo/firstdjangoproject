@@ -1,64 +1,75 @@
 from re import L
+from tokenize import group
 from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.forms import inlineformset_factory
 from django.urls import is_valid_path
 from sqlalchemy import null
+
+from accounts.decorators import unauthenticated_user
 from .models import *
 from .forms import CreateUserForm, OrderForm 
 from .filters import OrderFilter 
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from .decorators import unauthenticated_user, allowed_users, admin_only
+from django.contrib.auth.models import Group
 
 # Adding message
 from django.contrib import messages
 
 
-
 # Create your views here.
 
+@unauthenticated_user
 def registerPage(request):
-	if request.user.is_authenticated:
-		return redirect('home')
-	else:
-		form = CreateUserForm()
-		if request.method == "POST":
-			form = CreateUserForm(request.POST)
-			if form.is_valid():
-				form.save()
-				user = form.cleaned_data.get('username')
-				messages.success(request, 'Account was created successfuly for '+ user)
-				return redirect('login')
+	form = CreateUserForm()
+	if request.method == "POST":
+		form = CreateUserForm(request.POST)
 
-		context = {'form': form}
-		return render(request, 'accounts/register.html', context)
+		if form.is_valid():
+			user = form.save()
+			username = form.cleaned_data.get('username')
 
+			group = Group.objects.get(name="customer")
+			user.groups.add(group)
+
+			messages.success(request, 'Account was created successfuly for '+ username)
+
+			return redirect('login')
+
+	context = {'form': form}
+	return render(request, 'accounts/register.html', context)
+
+
+
+@unauthenticated_user
 def loginPage(request):
-	if request.user.is_authenticated:
-		return redirect('home')
-	else:
-		if request.method == 'POST':
-			username = request.POST.get('username')
-			password = request.POST.get('password')
+	if request.method == 'POST':
+		username = request.POST.get('username')
+		password = request.POST.get('password')
 
-			user = authenticate(request, username=username, password=password)
+		user = authenticate(request, username=username, password=password)
 
-			if user is not None:
-				login(request, user)
-				return redirect('home')
-			else:
-				messages.info(request, 'Username or password is incorrect')
+		if user is not None:
+			login(request, user)
+			return redirect('home')
+		else:
+			messages.info(request, 'Username or password is incorrect')
 				
 
-		context = {}
-		return render(request, 'accounts/login.html', context)
+	context = {}
+	return render(request, 'accounts/login.html', context)
 
 def logoutUser(request):
 	logout(request)
 	return redirect('login')
 
+
+
 @login_required(login_url='login')
+@admin_only
 def home(request):
 	# Showing the data in the home
 	orders = Order.objects.all()
@@ -72,13 +83,25 @@ def home(request):
 	context = {'orders':orders, 'customers':customers, 'total_orders':total_orders, 'delivered':delivered, 'pending':pending}
 	return render(request, 'accounts/dashboard.html', context)
 
+
+
+def userPage(request):
+	context = {}
+	return render(request, 'accounts/user.html', context)
+
+
+
 @login_required(login_url='login')
+@allowed_users(allowed_roles=['admin'])
 def products(request):
 	products = Product.objects.all()
 	# Rendering products to the view using teplates
 	return render(request, 'accounts/products.html', {'products':products})
 
+
+
 @login_required(login_url='login')
+@allowed_users(allowed_roles=['admin'])
 def customer(request, pk_test):
 	customer = Customer.objects.get(id=pk_test)
 	orders = customer.order_set.all()
@@ -88,7 +111,10 @@ def customer(request, pk_test):
 	context = {"customer": customer, 'orders': orders, 'orders_total': orders_total, 'myFilter': myFilter}
 	return render(request, 'accounts/customer.html', context)
 
+
+
 @login_required(login_url='login')
+@allowed_users(allowed_roles=['admin'])
 def createOrder(request, pk):
 
 # Creating inline forms
@@ -106,7 +132,10 @@ def createOrder(request, pk):
 	context = {'formSet': formSet}
 	return render(request, 'accounts/order_form.html', context)
 
+
+
 @login_required(login_url='login')
+@allowed_users(allowed_roles=['admin'])
 def updateOrders(request, pk):
 	order = Order.objects.get(id=pk)
 	form = OrderForm(instance=order)
@@ -121,7 +150,10 @@ def updateOrders(request, pk):
 	context = {'form':form}
 	return render(request, 'accounts/order_form.html', context)
 
+	
+
 @login_required(login_url='login')
+@allowed_users(allowed_roles=['admin'])
 def deleteOrders (request, pk):
 	order = Order.objects.get(id=pk)
 
